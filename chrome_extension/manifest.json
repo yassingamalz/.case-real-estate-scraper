@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "CASE - Manual Listing Export",
+  "version": "0.1.0",
+  "description": "Manually export the visible Immobiliare.it listing links and card text for local analysis.",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_title": "Export visible listings",
+    "default_popup": "popup.html"
+  }
+}
