@@ -1,0 +1,18 @@
+# Local browser and search credentials/state
+.case_chrome_profile/
+case_searches.json
+.env
+
+# Local output
+results/
+*.sqlite3
+*.log
+
+# Python/editor/system
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.vscode/
+.idea/
+.DS_Store
