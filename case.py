@@ -519,6 +519,66 @@ def dedup(args) -> None:
     dedup_rows(rows)
 
 
+def import_json(args) -> None:
+    """Import a one-click export from the local Chrome extension; never fetch URLs."""
+    cfg = settings()
+    area = canonical_area(args.area, cfg["areas"])
+    if area is None:
+        raise ValueError("Area is not configured. Run configure --add-area first.")
+    file_path = Path(args.input).expanduser()
+    if not file_path.is_file() or file_path.stat().st_size > 10_000_000:
+        raise ValueError("Import file missing or too large (max 10 MB)")
+    payload = json.loads(file_path.read_text(encoding="utf-8-sig"))
+    if (not isinstance(payload, dict)
+            or payload.get("format") != "case-visible-listings-v1"
+            or payload.get("site") != "immobiliare.it"
+            or site_of(payload.get("page_url", "")) != "immobiliare.it"):
+        raise ValueError("Not a valid CASE Immobiliare.it visible-listings export.")
+    if not isinstance(payload.get("items"), list) or len(payload["items"]) > 500:
+        raise ValueError("Export must contain an items list of at most 500 entries.")
+    page_url = payload["page_url"]
+    # Re-use the same location/price checks as browser search setup.
+    for warning in validate_search_url("immobiliare.it", area, page_url, cfg):
+        print("WARNING:", warning)
+    previous = []
+    output = OUTPUT_DIR / "listings.csv"
+    if output.exists():
+        with output.open(encoding="utf-8-sig", newline="") as stream:
+            previous = list(csv.DictReader(stream))
+    by_url = {entry["url"]: entry for entry in previous if entry.get("url")}
+    imported, excluded, incomplete = 0, 0, 0
+    for item in payload["items"]:
+        if not isinstance(item, dict):
+            continue
+        if not isinstance(item.get("url"), str) or not isinstance(item.get("text"), str):
+            continue
+        if len(item["text"]) > 3000:
+            continue
+        row = parse_card(item, "immobiliare.it", area)
+        if row is None:
+            continue
+        price = int(row["price_eur"]) if row["price_eur"] else None
+        sqm = int(row["area_m2"]) if row["area_m2"] else None
+        if ((price is not None and not cfg["min_price_eur"] <= price <= cfg["max_price_eur"])
+                or (sqm is not None and sqm < cfg["min_area_m2"])
+                or (not cfg["include_auctions"] and row["listing_type"] == "asta")):
+            excluded += 1
+            continue
+        if price is None or sqm is None:
+            row["notes"] += "; MISSING_PRICE_OR_AREA"
+            incomplete += 1
+        row["notes"] += "; MANUAL_EXTENSION_EXPORT"
+        by_url[row["url"]] = row
+        imported += 1
+    rows = list(by_url.values())
+    write_csv(output, rows, FIELDS)
+    summary = dedup_rows(rows)
+    print(f"Imported {imported} visible listings, excluded {excluded}, "
+          f"incomplete {incomplete}. Total saved: {len(rows)}")
+    print(f"Review results in: {OUTPUT_DIR.resolve()}")
+    return summary
+
+
 def main() -> None:
     cli = argparse.ArgumentParser(description="CASE real-estate visible Chrome collector")
     sub = cli.add_subparsers(dest="command", required=True)
@@ -546,6 +606,10 @@ def main() -> None:
     a.add_argument("--i-have-permission", action="store_true")
     a.set_defaults(fn=approve)
     sub.add_parser("collect", help="Visit permitted saved searches in real Chrome").set_defaults(fn=collect)
+    j = sub.add_parser("import-json", help="Import a manual Chrome extension export (no browser automation)")
+    j.add_argument("--input", required=True, help="Path to downloaded JSON file")
+    j.add_argument("--area", required=True, help="Configured area name")
+    j.set_defaults(fn=import_json)
     d = sub.add_parser("dedup", help="Deduplicate an existing CSV offline")
     d.add_argument("--input", default="examples/sample_listings.csv")
     d.set_defaults(fn=dedup)
