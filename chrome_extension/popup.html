@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CASE export</title>
+    <style>
+      body {font: 14px system-ui, sans-serif; width: 300px; margin: 0; padding: 18px; color: #1e293b; background: #f8fafc}
+      h1 {font-size: 18px; margin: 0 0 6px}
+      p {font-size: 13px; line-height: 1.5; color: #475569}
+      button {border: 0; border-radius: 8px; background: #0e7490; color: white; font: inherit; font-weight: 600; padding: 12px 15px; width: 100%; cursor: pointer}
+      button:disabled {opacity: .5; cursor: default}
+      #status {padding-top: 10px; font-size: 13px; overflow-wrap: anywhere}
+    </style>
+  </head>
+  <body>
+    <h1>CASE · Immobiliare.it</h1>
+    <p>Apri una pagina di risultati già filtrata nel tuo Chrome. Esporta solo gli annunci visibili nella pagina corrente, con un clic.</p>
+    <button id="export">Esporta annunci visibili (.json)</button>
+    <div id="status" role="status" aria-live="polite"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>
