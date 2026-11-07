@@ -1,0 +1,4 @@
+web-scraper-order,web-scraper-start-url,link-href,title,price,area,address,description
+"1","https://www.immobiliare.it/vendita-case/reggio-emilia/","https://www.immobiliare.it/annunci/12345678/","Bilocale via Roma 10","€ 79.000","70 m²","Via Roma 10","ESEMPIO FICTIZIO: non è un annuncio reale"
+"2","https://www.immobiliare.it/vendita-case/reggio-emilia/","https://www.immobiliare.it/annunci/22345678/","Bilocale viale Roma 10","€ 82.000","70 m²","Viale Roma 10","ESEMPIO FICTIZIO: non è un annuncio reale"
+"3","https://www.immobiliare.it/vendita-case/reggio-emilia/","https://www.immobiliare.it/annunci/32345678/","Trilocale via Milano 5","€ 68.000","65 m²","Via Milano 5","ESEMPIO FICTIZIO: non è un annuncio reale"
