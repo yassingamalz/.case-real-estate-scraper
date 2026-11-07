@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 import re
 import time
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 
 from case_parser import price_from, size_from, pick_address, number, match
 
@@ -261,6 +261,44 @@ def chrome_context(playwright):
             locale="it-IT", viewport={"width": 1280, "height": 900})
 
 
+def validate_search_url(site: str, area: str, url: str, cfg: dict) -> list[str]:
+    """Reject obvious search URL mistakes before saving them.
+
+    The checks below deliberately cover only known Immobiliare.it URL fields.
+    Unrecognised filters cannot be certified and must be verified in Chrome.
+    """
+    warnings = []
+    if site != "immobiliare.it":
+        return warnings
+    parsed = urlsplit(url)
+    # E.g. /vendita-case/reggio-emilia/ must not be labelled "Reggiolo".
+    path_match = re.fullmatch(r"/vendita-case/([a-z0-9-]+)/?", parsed.path, re.I)
+    expected_slug = re.sub(r"[^a-z0-9]+", "-", area.casefold()).strip("-")
+    if path_match and path_match.group(1).casefold() != expected_slug:
+        raise ValueError(
+            f"Wrong location in URL: '{path_match.group(1)}' is not '{expected_slug}' "
+            f"({area}). Open the correct results page and copy its URL."
+        )
+    params = parse_qs(parsed.query)
+    for name, key in (("prezzoMinimo", "min_price_eur"),
+                      ("prezzoMassimo", "max_price_eur")):
+        if name not in params:
+            warnings.append(f"{name} is not explicit in URL; verify in Chrome")
+            continue
+        try:
+            amount = int(params[name][-1])
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid URL parameter {name}") from None
+        if amount != cfg[key]:
+            raise ValueError(
+                f"URL parameter {name}={amount} conflicts with settings "
+                f"{key}={cfg[key]}. Align the filters on the real portal."
+            )
+    # The surface filter may be encoded in a changing site-specific form.
+    warnings.append("Verify minimum area and auction filters visually on the portal")
+    return warnings
+
+
 def setup(args) -> None:
     c = settings()
     area = canonical_area(args.area, c["areas"])
@@ -299,6 +337,8 @@ def setup(args) -> None:
                     raise ValueError("Browser is not on the expected portal. Nothing saved.")
             finally:
                 ctx.close()
+    for warning in validate_search_url(args.site, area, url, c):
+        print("WARNING:", warning)
     items = [x for x in load_searches()
              if not (x.get("site") == args.site and x.get("city") == area)]
     items.append({"site": args.site, "city": area, "url": url,
@@ -370,7 +410,8 @@ def collect(_args) -> None:
                         print("Timeout; stopping this search")
                         break
                     if response and response.status in (401, 403, 429):
-                        print("Site blocked or throttled automation; stopping search")
+                        print(f"Portal returned HTTP {response.status} ({response.url}). "
+                              "Automated collection stopped; do not bypass access restrictions.")
                         break
                     if any(x in page.title().casefold() for x in
                            ("captcha", "access denied", "just a moment", "verifica di sicurezza")):
