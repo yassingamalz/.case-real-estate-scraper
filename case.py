@@ -19,6 +19,7 @@ from case_parser import price_from, size_from, pick_address, number, match
 
 ROOT = Path(__file__).resolve().parent
 SETTINGS_FILE = ROOT / "settings.json"
+LOCAL_SETTINGS_FILE = ROOT / "settings.local.json"
 SEARCHES_FILE = ROOT / "case_searches.json"
 OUTPUT_DIR = ROOT / "results"
 SITES = {
@@ -86,6 +87,8 @@ def settings() -> dict:
     data = dict(DEFAULT)
     if SETTINGS_FILE.exists():
         data.update(json.loads(SETTINGS_FILE.read_text(encoding="utf-8")))
+    if LOCAL_SETTINGS_FILE.exists():
+        data.update(json.loads(LOCAL_SETTINGS_FILE.read_text(encoding="utf-8")))
     validate(data)
     return data
 
@@ -147,9 +150,9 @@ def configure(args) -> None:
     if args.auctions is not None:
         c["include_auctions"] = args.auctions == "yes"
     validate(c)
-    SETTINGS_FILE.write_text(json.dumps(c, indent=2, ensure_ascii=False) + "\n",
-                             encoding="utf-8")
-    print("Saved settings.json:\n" + json.dumps(c, indent=2, ensure_ascii=False))
+    LOCAL_SETTINGS_FILE.write_text(json.dumps(c, indent=2, ensure_ascii=False) + "\n",
+                                   encoding="utf-8")
+    print("Saved settings.local.json (not tracked by Git):\n" + json.dumps(c, indent=2, ensure_ascii=False))
     print("Remember: refresh saved portal URLs with 'setup' when changing filters.")
 
 
