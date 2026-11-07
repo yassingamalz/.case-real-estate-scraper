@@ -266,28 +266,45 @@ def setup(args) -> None:
     area = canonical_area(args.area, c["areas"])
     if area is None:
         raise ValueError("Add area to settings.json first, or use configure --add-area")
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError as ex:
-        raise SystemExit("Install requirements: python -m pip install -r requirements.txt") from ex
-    with sync_playwright() as p:
-        ctx = chrome_context(p)
+    if args.url:
+        # Save the URL from a normal browser without launching Playwright.
+        # This DOES NOT make automated collection possible if the portal blocks it.
+        url = args.url.strip()
+        parts = urlsplit(url)
+        if (site_of(url) != args.site or parts.username is not None
+                or parts.password is not None or parts.path in ("", "/")):
+            raise ValueError("Use a complete HTTPS search-result URL from the selected portal")
+        print("Verify that this URL shows the requested area and filters in your normal browser.")
+    else:
         try:
-            page = ctx.new_page()
-            page.goto(SITES[args.site], wait_until="domcontentloaded", timeout=45000)
-            print("In Chrome, select your area and apply ALL desired filters on the real portal.")
-            input(f"Showing {args.site} for {area}. Press Enter here on the results page...")
-            url = page.url
-            if site_of(url) != args.site:
-                raise ValueError("Browser is not on the expected portal. Nothing saved.")
-            items = [x for x in load_searches()
-                     if not (x.get("site") == args.site and x.get("city") == area)]
-            items.append({"site": args.site, "city": area, "url": url,
-                          "filters": snapshot(c), "authorized": False})
-            save_searches(items)
-            print("Search saved (disabled until explicit permission approval).", url)
-        finally:
-            ctx.close()
+            from playwright.sync_api import sync_playwright
+        except ImportError as ex:
+            raise SystemExit("Install requirements: python -m pip install -r requirements.txt") from ex
+        with sync_playwright() as p:
+            ctx = chrome_context(p)
+            try:
+                page = ctx.new_page()
+                try:
+                    page.goto(SITES[args.site], wait_until="domcontentloaded", timeout=45000)
+                except Exception as ex:
+                    raise ValueError(
+                        "Chrome could not load the portal. Open it in your normal browser, "
+                        "apply the filters, copy the results URL and use setup --url. "
+                        "This won't bypass restrictions on collect."
+                    ) from ex
+                print("In Chrome, select your area and apply ALL desired filters on the real portal.")
+                input(f"Showing {args.site} for {area}. Press Enter here on the results page...")
+                url = page.url
+                if site_of(url) != args.site:
+                    raise ValueError("Browser is not on the expected portal. Nothing saved.")
+            finally:
+                ctx.close()
+    items = [x for x in load_searches()
+             if not (x.get("site") == args.site and x.get("city") == area)]
+    items.append({"site": args.site, "city": area, "url": url,
+                  "filters": snapshot(c), "authorized": False})
+    save_searches(items)
+    print("Search saved (disabled until explicit permission approval).", url)
 
 
 def approve(args) -> None:
@@ -480,6 +497,7 @@ def main() -> None:
     s = sub.add_parser("setup", help="Save browser search URL for one portal and area")
     s.add_argument("--site", required=True, choices=sorted(SITES))
     s.add_argument("--area", required=True)
+    s.add_argument("--url", help="Use an already filtered URL from your normal Chrome without opening Playwright")
     s.set_defaults(fn=setup)
     a = sub.add_parser("approve", help="Explicitly enable a search if permitted")
     a.add_argument("--site", required=True, choices=sorted(SITES))

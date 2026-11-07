@@ -57,6 +57,16 @@ python case.py approve --site casa.it --area "Reggio Emilia" --i-have-permission
 
 Do **not** approve a site whose terms require permission that you do not have.
 
+### If the automated Chrome window stays on a blank/new tab
+
+Use the **normal Chrome browser** to open the real portal, apply the filters and confirm that results are displayed. Copy the **complete address bar URL** (including query parameters), then save it directly:
+
+~~~bash
+python case.py setup --site immobiliare.it --area "Reggio Emilia" --url "https://www.immobiliare.it/vendita-case/reggio-emilia/?prezzoMinimo=20000&prezzoMassimo=80000"
+~~~
+
+This example URL is illustrative: paste the URL that actually works for you, and verify it shows **Reggio Emilia**, not the different town **Reggiolo**, and the intended €20,000 minimum (not €2,000). This avoids the **browser-based setup step**, but `collect` still uses Playwright and may be blocked by portal restrictions. Saving a URL is not permission to scrape.
+
 ## 3. Collect and deduplicate
 
 ~~~bash
