@@ -1,0 +1,14 @@
+{
+  "max_price_eur": 80000,
+  "min_price_eur": 0,
+  "min_area_m2": 55,
+  "areas": [
+    "Reggio Emilia",
+    "Modena",
+    "Bologna",
+    "Prato"
+  ],
+  "max_pages_per_search": 2,
+  "pause_seconds": 6,
+  "include_auctions": true
+}
