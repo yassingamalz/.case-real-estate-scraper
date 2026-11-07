@@ -9,13 +9,13 @@ from __future__ import annotations
 import argparse
 import csv
 from datetime import date
-from difflib import SequenceMatcher
 import json
 from pathlib import Path
 import re
 import time
-import unicodedata
 from urllib.parse import urlsplit
+
+from case_parser import price_from, size_from, pick_address, number, match
 
 ROOT = Path(__file__).resolve().parent
 SETTINGS_FILE = ROOT / "settings.json"
@@ -167,6 +167,12 @@ def save_searches(items: list[dict]) -> None:
                              encoding="utf-8")
 
 
+def canonical_area(name: str, areas: list[str]) -> str | None:
+    """Match a configured area without depending on its capitalization."""
+    return next((area for area in areas
+                 if area.casefold() == str(name).strip().casefold()), None)
+
+
 def show(_args) -> None:
     c = settings()
     print("SETTINGS\n" + json.dumps(c, ensure_ascii=False, indent=2))
@@ -177,7 +183,7 @@ def show(_args) -> None:
             problems.append("NOT_APPROVED")
         if item.get("filters") != snapshot(c):
             problems.append("FILTERS_CHANGED")
-        if item.get("city") not in c["areas"]:
+        if canonical_area(item.get("city", ""), c["areas"]) is None:
             problems.append("AREA_REMOVED")
         print(item.get("site"), item.get("city"), item.get("url"),
               ", ".join(problems) if problems else "READY")
@@ -223,41 +229,13 @@ EXTRACT_JS = r"""() => {
   return {items, next_url: nextUrl};
 }"""
 
-PRICE_RX = re.compile(r"€\s*([\d.,]+)|([\d.,]+)\s*€")
-AREA_RX = re.compile(r"\b(\d{2,4})\s*(?:m²|mq|m2)\b", re.I)
-STREET_RX = re.compile(r"\b(?:via|viale|piazza|piazzale|corso|largo|strada)\s+[^,;|]{3,65}", re.I)
-
-
-def price_from(text: str) -> int | None:
-    for m in PRICE_RX.finditer(text):
-        s = (m.group(1) or m.group(2)).strip()
-        try:
-            n = float(s.replace(".", "").replace(",", ".")) if "," in s else float(s.replace(".", ""))
-            if 10000 <= n <= 30000000:
-                return int(n)
-        except ValueError:
-            continue
-    return None
-
-
-def size_from(text: str) -> int | None:
-    for m in AREA_RX.finditer(text):
-        n = int(m.group(1))
-        if 10 <= n <= 3000:
-            return n
-    return None
-
-
 def parse_card(item: dict, site: str, city: str) -> dict | None:
     url = item.get("url", "")
     if not valid_listing_url(url) or site_of(url) != site:
         return None
     text = item.get("text", "")
     title = item.get("title", "") or text[:120]
-    address_match = STREET_RX.search(title)
-    if address_match is None:
-        address_match = STREET_RX.search(text[:200])
-    addr = address_match.group(0).strip(" ,-.:") if address_match else ""
+    addr = pick_address(title, text)
     price = price_from(text)
     area = size_from(text)
     return {
@@ -285,7 +263,8 @@ def chrome_context(playwright):
 
 def setup(args) -> None:
     c = settings()
-    if args.area not in c["areas"]:
+    area = canonical_area(args.area, c["areas"])
+    if area is None:
         raise ValueError("Add area to settings.json first, or use configure --add-area")
     try:
         from playwright.sync_api import sync_playwright
@@ -297,13 +276,13 @@ def setup(args) -> None:
             page = ctx.new_page()
             page.goto(SITES[args.site], wait_until="domcontentloaded", timeout=45000)
             print("In Chrome, select your area and apply ALL desired filters on the real portal.")
-            input(f"Showing {args.site} for {args.area}. Press Enter here on the results page...")
+            input(f"Showing {args.site} for {area}. Press Enter here on the results page...")
             url = page.url
             if site_of(url) != args.site:
                 raise ValueError("Browser is not on the expected portal. Nothing saved.")
             items = [x for x in load_searches()
-                     if not (x.get("site") == args.site and x.get("city") == args.area)]
-            items.append({"site": args.site, "city": args.area, "url": url,
+                     if not (x.get("site") == args.site and x.get("city") == area)]
+            items.append({"site": args.site, "city": area, "url": url,
                           "filters": snapshot(c), "authorized": False})
             save_searches(items)
             print("Search saved (disabled until explicit permission approval).", url)
@@ -315,10 +294,13 @@ def approve(args) -> None:
     if not args.i_have_permission:
         raise ValueError("Check portal terms and confirm the required authorization explicitly.")
     c = settings()
+    area = canonical_area(args.area, c["areas"])
+    if area is None:
+        raise ValueError("Unknown area in settings.json")
     items = load_searches()
     count = 0
     for x in items:
-        if x.get("site") == args.site and x.get("city") == args.area:
+        if x.get("site") == args.site and canonical_area(x.get("city", ""), c["areas"]) == area:
             if x.get("filters") != snapshot(c):
                 raise ValueError("Filter settings changed: run setup again first")
             x["authorized"] = True
@@ -326,7 +308,7 @@ def approve(args) -> None:
     if not count:
         raise ValueError("Saved search not found; run setup first")
     save_searches(items)
-    print("Enabled permitted search:", args.site, args.area)
+    print("Enabled permitted search:", args.site, area)
 
 
 def write_csv(path: Path, items: list[dict], fields: list[str]) -> None:
@@ -343,7 +325,7 @@ def collect(_args) -> None:
                 if x.get("authorized") is True
                 and x.get("site") in SITES
                 and site_of(x.get("url", "")) == x.get("site")
-                and x.get("city") in c["areas"]
+                and canonical_area(x.get("city", ""), c["areas"]) is not None
                 and x.get("filters") == snapshot(c)]
     if not searches:
         raise ValueError("No permitted, current searches. Run setup and approve.")
@@ -403,47 +385,6 @@ def collect(_args) -> None:
     write_csv(output, results, FIELDS)
     print(f"Saved {len(results)} candidates: {output}")
     dedup_rows(results)
-
-
-def normal(text: str) -> str:
-    s = unicodedata.normalize("NFKD", str(text).casefold())
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    s = re.sub(r"\b(via|viale|piazza|piazzale|corso|strada)\b", "", s)
-    return re.sub(r"[^a-z0-9]+", " ", s).strip()
-
-
-def number(text: str) -> int | None:
-    try:
-        return int(float(str(text).replace(".", "").replace(",", ".")))
-    except (ValueError, TypeError):
-        return None
-
-
-def match(a: dict, b: dict) -> tuple[str, float, str]:
-    if a.get("url") == b.get("url"):
-        return "MATCH", 1.0, "SAME_URL"
-    if normal(a.get("city", "")) != normal(b.get("city", "")):
-        return "NONE", 0.0, "DIFFERENT_CITY"
-    if a.get("site") == b.get("site"):
-        return "NONE", 0.0, "SAME_SITE_DIFFERENT_AD"
-    pa, pb = number(a.get("price_eur")), number(b.get("price_eur"))
-    ma, mb = number(a.get("area_m2")), number(b.get("area_m2"))
-    if not all(v is not None for v in (pa, pb, ma, mb)):
-        return "NONE", 0.0, "INSUFFICIENT_DETAILS"
-    pdiff = abs(pa-pb) / max(pa, pb, 1)
-    mdiff = abs(ma-mb) / max(ma, mb, 1)
-    street_a, street_b = normal(a.get("address", "")), normal(b.get("address", ""))
-    if street_a and street_b and street_a == street_b:
-        if pdiff <= .05 and mdiff <= .15:
-            return "MATCH", .93, "SAME_ADDRESS_PRICE_SIZE"
-        if pdiff <= .08 and mdiff <= .35:
-            return "REVIEW", .7, "ADDRESS_MATCH_BUT_DETAILS_CONFLICT"
-        return "NONE", 0.0, "ADDRESS_SAME_BUT_DIFFERENT_PROPERTY"
-    title_sim = SequenceMatcher(None, normal(a.get("title", "")),
-                               normal(b.get("title", ""))).ratio()
-    if pdiff <= .02 and mdiff <= .05 and title_sim >= .8:
-        return "REVIEW", .67, "SIMILAR_TITLE_PRICE_SIZE_VERIFY_ADDRESS"
-    return "NONE", 0.0, "INSUFFICIENT_EVIDENCE"
 
 
 def dedup_rows(rows: list[dict]) -> dict:
