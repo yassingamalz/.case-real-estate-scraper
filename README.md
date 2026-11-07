@@ -1,4 +1,45 @@
-# CASE — Italian Real Estate Browser Collector
+# CASE — Italian Real Estate Listing Collector
+
+## Recommended workflow: existing Web Scraper extension → CSV → CASE
+
+**For Immobiliare.it, start with Web Scraper CSV imports, not `python case.py collect`.** The site has rejected automated Playwright collection in the user's tests.
+
+1. Install [Web Scraper Chrome extension](https://chromewebstore.google.com/detail/jnhgnonknehpejjnehehllkliplmbmhn).
+2. Follow **[WEB_SCRAPER_GUIDE_IT.md](WEB_SCRAPER_GUIDE_IT.md)** to configure one listing card and export a permitted single-page CSV.
+3. Set the filters (personal settings are saved to `settings.local.json`, which Git ignores):
+
+~~~bash
+python case.py configure --min-price 20000 --max-price 80000 --min-area 30 --areas "Reggio Emilia"
+~~~
+
+4. Import your CSV with no browser automation:
+
+~~~bash
+python case.py import-webscraper --input "/c/Users/YassinSohim/Downloads/annunci.csv" --area "Reggio Emilia"
+~~~
+
+5. Check `results/unique_properties.csv` and `results/matches.csv`. Keep source evidence and manually check each match.
+
+**Legacy modes:** The custom `chrome_extension/` and `collect` commands remain available for compatibility, but are not the recommended route. The local CSV import works without Chrome automation. An extension is **not** authorization to scrape; respect each website's current terms, stop on access blocks and never bypass them.
+
+## Updating an existing checkout with personalized settings
+
+Older versions wrote changes directly into tracked `settings.json`. Back them up before pulling:
+
+~~~bash
+cp settings.json settings.backup.json
+git status
+git stash push -m "my old CASE settings" -- settings.json
+git pull --ff-only
+cp settings.backup.json settings.local.json
+python case.py show
+~~~
+
+The new `configure` command writes `settings.local.json`, so subsequent pulls leave your preferences alone. The backup is not ignored by default: do **not** commit or push it.
+
+---
+
+## Legacy browser collection documentation
 
 Personal research tool for **Casa.it**, **Immobiliare.it**, and **Idealista.it**. Opens **real Chrome** via Playwright, collects links and public listing-card details from saved search-result pages *when permitted*, applies your filters, and flags likely duplicate advertisements across the three portals. **No Brave Search API. No web app.**
 
