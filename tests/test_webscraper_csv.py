@@ -48,8 +48,8 @@ class CSVImportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             source = Path(d) / "source.csv"
             source.write_text(
-                "web-scraper-start-url;link-href;titolo;prezzo;superficie\\n"
-                "https://www.immobiliare.it/vendita-case/reggio-emilia/;/annunci/1234/;Casa;79000;65\\n".replace("\\n", "\n"), encoding="utf-8")
+                "web-scraper-start-url;link-href;titolo;prezzo;superficie\n"
+                "https://www.immobiliare.it/vendita-case/reggio-emilia/;/annunci/1234/;Casa;79000;65\n", encoding="utf-8")
             rows, _ = read_csv_records(source)
             self.assertEqual(rows[0]["url"], "https://www.immobiliare.it/annunci/1234/")
             self.assertEqual(rows[0]["title"], "Casa")
@@ -58,7 +58,7 @@ class CSVImportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             folder = Path(d)
             source = folder / "source.csv"
-            source.write_text("link-href,price,area\\nhttps://invalid.example/item,79000,65\\n".replace("\\n", "\n"))
+            source.write_text("link-href,price,area\nhttps://invalid.example/item,79000,65\n")
             with patch.object(case, "settings", return_value=CFG), \
                  patch.object(case, "OUTPUT_DIR", folder / "results"):
                 case.import_webscraper_csv(argparse.Namespace(
