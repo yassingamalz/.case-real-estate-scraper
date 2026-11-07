@@ -1,5 +1,6 @@
 """Offline regression tests for Italian listing text and cross-portal duplicates."""
 import unittest
+from case import canonical_area
 from case_parser import price_from, number, address_from, pick_address, address_parts, match
 
 
@@ -19,6 +20,14 @@ class PriceRegressionTests(unittest.TestCase):
             with self.subTest(raw=raw):
                 self.assertEqual(number(raw), 79000)
         self.assertIsNone(number('n.d.'))
+
+
+class LocationRegressionTests(unittest.TestCase):
+    def test_case_insensitive_configured_area(self):
+        areas = ['Reggio Emilia', 'Modena', 'Bologna', 'Prato']
+        self.assertEqual(canonical_area('modena', areas), 'Modena')
+        self.assertEqual(canonical_area(' REGGIO EMILIA ', areas), 'Reggio Emilia')
+        self.assertIsNone(canonical_area('Milano', areas))
 
 
 class AddressRegressionTests(unittest.TestCase):
