@@ -17,7 +17,13 @@ class SetupUrlTests(unittest.TestCase):
                 area="Reggio Emilia",
                 url="https://www.immobiliare.it/vendita-case/reggio-emilia/?prezzoMinimo=20000&prezzoMassimo=80000",
             )
-            with patch.object(case, "SEARCHES_FILE", path):
+            configured = {
+                **case.DEFAULT,
+                "min_price_eur": 20000,
+                "max_price_eur": 80000,
+            }
+            with patch.object(case, "SEARCHES_FILE", path), \
+                 patch.object(case, "settings", return_value=configured):
                 case.setup(args)
                 entries = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(len(entries), 1)
