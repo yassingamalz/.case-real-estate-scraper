@@ -579,6 +579,87 @@ def import_json(args) -> None:
     return summary
 
 
+def import_webscraper_csv(args) -> None:
+    """Import a Web Scraper extension CSV without accessing any website."""
+    from case_csv import read_csv_records
+
+    cfg = settings()
+    area = canonical_area(args.area, cfg["areas"])
+    if area is None:
+        raise ValueError("Area is not configured; use 'configure --add-area' first.")
+    columns = {field: getattr(args, field + "_column", None)
+               for field in ("url", "title", "price", "area", "address",
+                             "description", "start_url")}
+    raw_rows, headers = read_csv_records(args.input, columns)
+    print("CSV columns:", ", ".join(headers))
+    output = OUTPUT_DIR / "listings.csv"
+    previous = []
+    if output.exists():
+        with output.open("r", newline="", encoding="utf-8-sig") as stream:
+            previous = list(csv.DictReader(stream))
+    # Previous successful imports are never deleted or overwritten on failure.
+    by_url = {r["url"]: r for r in previous if r.get("url")}
+    imported = skipped = incomplete = invalid = 0
+    for raw in raw_rows:
+        url = raw["url"]
+        if site_of(url) != args.site or not valid_listing_url(url):
+            invalid += 1
+            continue
+        title = raw["title"]
+        raw_description = raw["description"]
+        # Include individual fields to parse even when there is no long text.
+        combined = " ".join(
+            part for part in (title, raw["address"],
+                              ("€ " + raw["price"]) if raw["price"] else "",
+                              (raw["area"] + " m²") if raw["area"] and
+                              raw["area"].strip().isdigit() else raw["area"],
+                              raw_description)
+            if part
+        )
+        row = parse_card({"url": url, "title": title, "text": combined}, args.site, area)
+        if not row:
+            invalid += 1
+            continue
+        from case_parser import number
+        # Explicitly selected CSV fields take precedence over heuristic card parsing.
+        price = number(raw["price"]) if raw["price"] else None
+        size = number(raw["area"].replace("m²", "").replace("mq", "").strip()) if raw["area"] else None
+        if price is not None:
+            row["price_eur"] = str(price)
+        if size is not None:
+            row["area_m2"] = str(size)
+        if raw["address"]:
+            from case_parser import address_from
+            row["address"] = address_from(raw["address"]) or row["address"]
+        row["description"] = combined[:700]
+        row["notes"] = "WEB_SCRAPER_CSV; VERIFY_MANUALLY"
+        price_val = int(row["price_eur"]) if row["price_eur"] else None
+        size_val = int(row["area_m2"]) if row["area_m2"] else None
+        if (price_val is not None and not cfg["min_price_eur"] <= price_val <= cfg["max_price_eur"]) or (
+            size_val is not None and size_val < cfg["min_area_m2"]) or (
+            not cfg["include_auctions"] and row["listing_type"] == "asta"
+        ):
+            skipped += 1
+            continue
+        if price_val is None or size_val is None:
+            incomplete += 1
+            row["notes"] += "; MISSING_PRICE_OR_AREA"
+        by_url[url] = row
+        imported += 1
+    if not imported:
+        print("WARNING: No matching listings imported; existing results were left unchanged.")
+        print(f"Skipped by filters: {skipped}; invalid URLs: {invalid}. "
+              "Check the site and the Web Scraper column mapping.")
+        return
+    rows = list(by_url.values())
+    write_csv(output, rows, FIELDS)
+    summary = dedup_rows(rows)
+    print(f"Imported {imported} listings; filtered out {skipped}; "
+          f"invalid links {invalid}; incomplete {incomplete}.")
+    print(f"Total unique URLs: {len(rows)}. Review: {OUTPUT_DIR.resolve()}")
+    return summary
+
+
 def main() -> None:
     cli = argparse.ArgumentParser(description="CASE real-estate visible Chrome collector")
     sub = cli.add_subparsers(dest="command", required=True)
@@ -610,6 +691,14 @@ def main() -> None:
     j.add_argument("--input", required=True, help="Path to downloaded JSON file")
     j.add_argument("--area", required=True, help="Configured area name")
     j.set_defaults(fn=import_json)
+    w = sub.add_parser("import-webscraper", help="Import a Web Scraper extension CSV offline")
+    w.add_argument("--input", required=True, help="CSV exported by Web Scraper")
+    w.add_argument("--area", required=True, help="A configured municipality/area")
+    w.add_argument("--site", choices=sorted(SITES), default="immobiliare.it")
+    for field in ("url", "title", "price", "area", "address", "description", "start_url"):
+        w.add_argument("--" + field.replace("_", "-") + "-column",
+                       dest=field + "_column", help=f"Exact CSV column for {field}")
+    w.set_defaults(fn=import_webscraper_csv)
     d = sub.add_parser("dedup", help="Deduplicate an existing CSV offline")
     d.add_argument("--input", default="examples/sample_listings.csv")
     d.set_defaults(fn=dedup)
