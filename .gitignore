@@ -16,3 +16,6 @@ __pycache__/
 .vscode/
 .idea/
 .DS_Store
+
+# Personal search preferences (saved by `configure`)
+settings.local.json
