@@ -1,0 +1,4 @@
+site,url,city,title,address,price_eur,area_m2,description,listing_type,source_checked_on,notes
+casa.it,https://www.casa.it/immobili/12345678/,Reggio Emilia,Bilocale in Via Esempio 10,Via Esempio 10,79000,65,Sample fictional property for tests,vendita,2026-11-07,SYNTHETIC_EXAMPLE_NOT_REAL_LISTING
+idealista.it,https://www.idealista.it/immobile/12345678/,Reggio Emilia,Appartamento Via Esempio 10,Via Esempio 10,79000,65,Sample fictional duplicate for tests,vendita,2026-11-07,SYNTHETIC_EXAMPLE_NOT_REAL_LISTING
+immobiliare.it,https://www.immobiliare.it/annunci/12345678/,Reggio Emilia,Bilocale in Via Diversa 2,Via Diversa 2,79000,65,Different fictional apartment same price and size,vendita,2026-11-07,SYNTHETIC_EXAMPLE_NOT_REAL_LISTING
